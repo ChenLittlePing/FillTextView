@@ -187,12 +187,15 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         mTextList.clear()
         val texts = mText.split(EDIT_TAG)
         for (i in 0 until texts.size - 1) {
-            val aText = AText(texts[i])
-            mTextList.add(aText)
-            val fillText = AText(EDIT_REPLACEMENT, true)
-            mTextList.add(fillText)
+            var text = texts[i]
+            if (i > 0) {
+                text = mEditEndTag + text
+            }
+            text += mEditStartTag
+            mTextList.add(AText(text))
+            mTextList.add(AText(BLANKS, true))
         }
-        mTextList.add(AText(texts[texts.size - 1]))
+        mTextList.add(AText(mEditEndTag + texts[texts.size - 1]))
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -363,6 +366,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      */
     private fun addEditStartPos(aText: AText) {
         if (aText.isFill && mStartIndex == 0) {
+            aText.posInfo.clear()
             val width = measureTextLength(mOneRowText.toString()).toInt()
             val rect = Rect(width, (getRowHeight()*(mCurDrawRow - 1) + mRowSpace/*加上行距*/).toInt(), 0, 0)
             val info = EditPosInfo(mStartIndex, rect)
@@ -452,7 +456,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
                     if (event.x > posInfo.rect.left && event.x < posInfo.rect.right &&
                         event.y > posInfo.rect.top && event.y < posInfo.rect.bottom) {
                         mEditTextRow = row
-                        if (aText.text == EDIT_REPLACEMENT) {
+                        if (aText.text == BLANKS) {
                             val firstRow = aText.getStartPos()
                             if (firstRow >= 0) { //可能存在换行
                                 mEditTextRow = firstRow
@@ -477,16 +481,22 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         var nWord = (innerWidth / mOneWordWidth).toInt()
         var wordsWidth = 0
         if (nWord <= 0) nWord = 1
-        if (text == EDIT_REPLACEMENT) {
-            mCursor[0] = (posInfo.rect.left + mTextSize)
+        if (text == BLANKS) {
+            mCursor[0] = posInfo.rect.left.toFloat()
             mCursor[1] = posInfo.rect.bottom.toFloat()
+            mCursorIndex = 0
         } else {
             //循环计算，直到最后一个真正超过显示范围的文字（因为汉字和英文数字占位不一样，这里以汉字作为初始占位）
             do {
                 wordsWidth = measureTextLength(text.substring(posInfo.index, posInfo.index + nWord)).toInt()
                 nWord++
-            } while (wordsWidth < innerWidth && posInfo.index + nWord < text.length)
+            } while (wordsWidth < innerWidth && posInfo.index + nWord <= text.length)
             mCursorIndex = posInfo.index + nWord - 1
+            val leftWidth = wordsWidth - innerWidth //计算点击位置是否超过所点击文字的一半
+            if (leftWidth > measureTextLength(text.substring(mCursorIndex - 1, mCursorIndex))/2) {
+                mCursorIndex--
+            }
+
             mCursor[0] = posInfo.rect.left + measureTextLength(text.substring(posInfo.index, mCursorIndex))
             mCursor[1] = posInfo.rect.bottom.toFloat()
         }
@@ -498,17 +508,15 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      */
     override fun onTextInput(text: CharSequence) {
         if (mEditingText != null) {
-            val filledText = StringBuffer(mEditingText!!.text.replace(EDIT_REPLACEMENT, ""))
+            val filledText = StringBuffer(mEditingText!!.text.replace(BLANKS, ""))
             if (filledText.isEmpty()) {
                 filledText.append(text)
-                mCursorIndex = text.length + 1
+                mCursorIndex = text.length
             } else {
                 filledText.insert(mCursorIndex, text)
-                        .replace(0,1,"")
-                        .replace(filledText.length - 1, filledText.length, "")
                 mCursorIndex += text.length
             }
-            mEditingText!!.text = "【$filledText】"
+            mEditingText!!.text = filledText.toString()
             if (mCursor[0] + measureTextLength(text.toString()) > mWidth) {//计算实际可以放多少字
                 var restCount = ((mWidth - mCursor[0])/mOneWordWidth).toInt()
                 var realWidth = mCursor[0] + measureTextLength(text.substring(0, restCount))
@@ -552,35 +560,35 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     override fun onDeleteWord() {
         if (mEditingText != null) {
             val text = StringBuffer(mEditingText?.text)
-            if (!text.isNullOrEmpty() && text.length > 1) {
-                if (mCursorIndex > 1) {
-                    var cursorPos = (mCursor[0] - measureTextLength(text.substring(mCursorIndex - 1, mCursorIndex))).toInt()
-                    if (cursorPos >= 0) {//光标仍然在同一行
-                        mCursor[0] = cursorPos.toFloat()
-                    } else { //光标回到上一行
-                        mEditTextRow--
-                        val posInfo = mEditingText!!.posInfo[mEditTextRow]!!
-                        mCursor[0] = posInfo.rect.left + measureTextLength(text.substring(posInfo.index, mCursorIndex - 1))
+            if (!text.isNullOrEmpty() &&
+                text.toString() != BLANKS &&
+                mCursorIndex >= 1) {
+                var cursorPos = (mCursor[0] - measureTextLength(text.substring(mCursorIndex - 1, mCursorIndex))).toInt()
+                if (cursorPos > 0) {//光标仍然在同一行
+                    mCursor[0] = cursorPos.toFloat()
+                } else { //光标回到上一行
+                    mEditTextRow--
+                    val posInfo = mEditingText!!.posInfo[mEditTextRow]!!
+                    mCursor[0] = posInfo.rect.left + measureTextLength(text.substring(posInfo.index, mCursorIndex - 1))
+                    mCursor[1] = getRowHeight() * (mEditTextRow)
+                }
+                mEditingText?.text = text.replace(mCursorIndex - 1, mCursorIndex, "").toString()
+                mCursorIndex--
+
+                if (mEditingText?.text?.length?:0 <= 0) {
+                    if (text.toString() != BLANKS) {
+                        mEditingText?.text = BLANKS
+                        mCursorIndex = 1
+                        val firstRow = mEditingText!!.getStartPos()
+                        if (firstRow > 0) {//可能存在换行
+                            mEditTextRow = firstRow
+                        }
+                        mCursor[0] = mEditingText!!.posInfo[mEditTextRow]!!.rect.left.toFloat()
                         mCursor[1] = getRowHeight() * (mEditTextRow)
                     }
-                    mEditingText?.text = text.replace(mCursorIndex - 1, mCursorIndex, "").toString()
-                    mCursorIndex--
-
-                    if (mEditingText?.text?.length?:0 < 3) {
-                        if (text.toString() != EDIT_REPLACEMENT) {
-                            mEditingText?.text = EDIT_REPLACEMENT
-                            mCursorIndex = 1
-                            val firstRow = mEditingText!!.getStartPos()
-                            if (firstRow > 0) {//可能存在换行
-                                mEditTextRow = firstRow
-                            }
-                            mCursor[0] = mEditingText!!.posInfo[mEditTextRow]!!.rect.left + mTextSize
-                            mCursor[1] = getRowHeight() * (mEditTextRow)
-                        }
-                    }
-
-                    invalidate()
                 }
+
+                invalidate()
             }
         }
     }
@@ -619,7 +627,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         val list = arrayListOf<String>()
         for (value in mTextList) {
             if (value.isFill) {
-                list.add(value.text.replace("【", "").replace("】", ""))
+                list.add(value.text)
             }
         }
         return list

@@ -17,11 +17,13 @@
             android:layout_marginRight="10dp"
             app:rowSpace="3"
             app:fillColor="@android:color/holo_blue_dark"
-            app:filledText="你好我是，我来自&#060;fill&#062;。我来填空啦！你好我是&#060;fill&#062;，我来自&#060;fill&#062;。我来填空啦！"/>
+            app:filledText="&#060;fill&#062;你好我是，我来自&#060;fill&#062;。我来填空啦！你好我是&#060;fill&#062;，我来自&#060;fill&#062;。我来填空啦！&#060;fill&#062;"/>
 
     <Button android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:onClick="clickBtn"
             app:layout_constraintTop_toBottomOf="@+id/fillText"
-            android:text="点击"/>
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            android:text="获取填空内容"/>
 </android.support.constraint.ConstraintLayout>

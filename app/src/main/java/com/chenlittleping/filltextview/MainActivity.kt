@@ -2,8 +2,8 @@ package com.chenlittleping.filltextview
 
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
-import android.util.Log
 import android.view.View
+import android.widget.Toast
 import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
@@ -15,9 +15,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun clickBtn(view: View) {
+        var t = ""
         for (text in fillText.getFillTexts()) {
-            Log.i("ccccc", "text: $text")
+            t += text
+            t +=","
         }
-
+        Toast.makeText(this, t.subSequence(0, t.length - 1), Toast.LENGTH_LONG).show()
     }
 }
