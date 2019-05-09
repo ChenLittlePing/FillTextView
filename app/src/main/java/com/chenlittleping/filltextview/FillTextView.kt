@@ -21,7 +21,7 @@ import android.view.inputmethod.InputMethodManager
 /**
  * 文本填空控件
  *
- * @author Chen Xiaoping (562818444@qq.com)
+ * @author ChenLittlePing (562818444@qq.com)
  * @Datetime 2019-04-28 15:02
  *
  */
@@ -55,7 +55,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     private var mEditTextRow = 1
 
     //光标[0]：x坐标,[1]：文字的基准线
-    private var mCursor = arrayOf(0f, 0f)
+    private var mCursor = arrayOf(-1f, -1f)
 
     //光标所在文字索引
     private var mCursorIndex = 0
@@ -80,6 +80,9 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
 
     //光标画笔
     private val mCursorPain = Paint()
+
+    //光标宽度1dp
+    private var mCursorWidth = 1f
 
     //一个汉字的宽度
     private var mOneWordWidth = 0f
@@ -145,7 +148,8 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      * 初始化光标画笔
      */
     private fun initCursorPaint() {
-        mCursorPain.strokeWidth = 3f
+        mCursorWidth = dp2px(mCursorWidth).toFloat()
+        mCursorPain.strokeWidth = mCursorWidth
         mCursorPain.color = mFillColor
         mCursorPain.isAntiAlias = true
     }
@@ -354,10 +358,21 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
             mCursorPain.alpha = 255
         }
 
-        if (mCursor[0] > 0 && mCursor[1] >= 0) {
+        if (mCursor[0] >= 0 && mCursor[1] >= 0) {
+            if (mEditingText?.text == BLANKS && //光标可能需要换到上一行
+                (mCursor[0] == 0f || (mCursor[0] == mCursorWidth && mEditingText!!.posInfo.size > 1))) {
+                if (mEditingText!!.posInfo.size > 1) {
+                    mEditTextRow = mEditingText!!.getStartPos() //得到可编辑字段最上面一行的起始位置
+                    val posInfo =  mEditingText!!.posInfo[mEditTextRow]
+                    mCursor[0] = posInfo!!.rect.left.toFloat()
+                    mCursor[1] = posInfo!!.rect.bottom.toFloat()
+                    if (mCursor[0] <= 0) mCursor[0] = mCursorWidth //矫正光标X轴坐标
+                }
+            }
+
             val fm = mNormalPaint.fontMetrics //文字基准线问题
             canvas.drawLine(mCursor[0], mCursor[1] + fm.ascent,
-                    mCursor[0], (mCursor[1] + fm.descent), mCursorPain)
+                mCursor[0], (mCursor[1] + fm.descent), mCursorPain)
         }
     }
 
@@ -564,7 +579,8 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
                 text.toString() != BLANKS &&
                 mCursorIndex >= 1) {
                 var cursorPos = (mCursor[0] - measureTextLength(text.substring(mCursorIndex - 1, mCursorIndex))).toInt()
-                if (cursorPos > 0) {//光标仍然在同一行
+                if (cursorPos > 0 ||
+                    (cursorPos == 0 && mEditingText!!.posInfo.size == 1)) {//光标仍然在同一行
                     mCursor[0] = cursorPos.toFloat()
                 } else { //光标回到上一行
                     mEditTextRow--
@@ -656,7 +672,7 @@ internal class MyInputConnection(targetView: View, fullEditor: Boolean, private 
 /**
  * 文字段落
  *
- * @author Chen Xiaoping (562818444@qq.com)
+ * @author ChenLittlePing (562818444@qq.com)
  * @Datetime 2019-04-29 09:27
  *
  */
