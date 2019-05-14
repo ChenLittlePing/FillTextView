@@ -16,6 +16,7 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import java.util.regex.Pattern
 
 
 /**
@@ -108,8 +109,18 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     //一行字包含的字段：普通字段，可编辑字段
     private var mOneRowTexts = arrayListOf<AText>()
 
-    //默认行距2dp
+    //默认行距2dp，也是最小行距（用户设置的行距在此基础上叠加，即：2 + cst）
     private var mRowSpace = 2f
+
+    //是否显示下划线
+    private var mUnderlineVisible = false
+
+    //下划线画笔
+    private val mUnderlinePain = Paint().apply {
+        strokeWidth = dp2px(1f).toFloat()
+        color = Color.BLACK
+        isAntiAlias = true
+    }
 
     constructor(context: Context): super(context) {
         init()
@@ -333,12 +344,19 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     private fun drawOneRow(canvas: Canvas) {
         //drawText中的y坐标为文字基线
 //        canvas.drawText(mOneRowText.toString(), 0f, getRowHeight()*mCurDrawRow, mNormalPaint)
-
+        val fm = mNormalPaint.fontMetrics //文字基准线问题
         var x = 0f
         for (aText in mOneRowTexts) {
             canvas.drawText(aText.text, x, getRowHeight()*mCurDrawRow,
                             if (aText.isFill) mFillPaint else mNormalPaint)
+
+            val lineStartX = x
             x += measureTextLength(aText.text)
+
+            if (aText.isFill && mUnderlineVisible) {
+                canvas.drawLine(lineStartX, getRowHeight()*mCurDrawRow + fm.descent,
+                    x, (getRowHeight()*mCurDrawRow + fm.descent), mUnderlinePain)
+            }
         }
 
         mCurDrawRow++
@@ -637,6 +655,30 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     }
 
     /**
+     * 设置可编辑标记的开始和结束符
+     */
+    fun setEditTag(startTag: String, endTag: String) {
+        mEditStartTag = startTag
+        mEditEndTag = endTag
+        invalidate()
+    }
+
+    /**
+     * 设置是否显示可编辑字段下划线
+     */
+    fun displayUnderline(visible: Boolean) {
+        mUnderlineVisible = visible
+    }
+
+    /**
+     * 设置下划线颜色
+     */
+    fun setUnderlineColor(color: Int) {
+        mUnderlinePain.color = color
+        invalidate()
+    }
+
+    /**
      * 获取填写的文本内容
      */
     fun getFillTexts(): List<String> {
@@ -652,8 +694,19 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
 
 internal class MyInputConnection(targetView: View, fullEditor: Boolean, private val mListener: InputListener) : BaseInputConnection(targetView, fullEditor) {
     override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-        mListener.onTextInput(text)
+        if (!isEmoji(text)) { //过滤emoji表情
+            mListener.onTextInput(text)
+        }
         return super.commitText(text, newCursorPosition)
+    }
+
+    private fun isEmoji(string: CharSequence): Boolean {
+        //过滤Emoji表情
+        val p = Pattern.compile("[^\\u0000-\\uFFFF]")
+        //过滤Emoji表情和颜文字
+        //Pattern p = Pattern.compile("[\\ud83c\\udc00-\\ud83c\\udfff]|[\\ud83d\\udc00-\\ud83d\\udfff]|[\\u2600-\\u27ff]|[\\ud83e\\udd00-\\ud83e\\uddff]|[\\u2300-\\u23ff]|[\\u2500-\\u25ff]|[\\u2100-\\u21ff]|[\\u0000-\\u00ff]|[\\u2b00-\\u2bff]|[\\u2d06]|[\\u3030]")
+        val m = p.matcher(string)
+        return m.find()
     }
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
