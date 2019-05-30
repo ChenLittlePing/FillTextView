@@ -12,10 +12,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            app:textSize="16"
+            app:fillTextSize="16sp"
             android:layout_marginLeft="10dp"
             android:layout_marginRight="10dp"
-            app:rowSpace="3"
+            app:rowSpace="3dp"
             app:fillColor="@android:color/holo_blue_dark"
             app:filledText="大家好，我是&#060;fill&#062;，我来自&#060;fill&#062;。我就是来填个空而已&#060;fill&#062;"/>
 

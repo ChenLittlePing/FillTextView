@@ -2,9 +2,9 @@
 <resources>
     <declare-styleable name="filled_text">
         <attr name="filledText" format="string"></attr>
-        <attr name="textSize" format="float"></attr>
+        <attr name="fillTextSize" format="dimension"></attr>
         <attr name="normalColor" format="color"></attr>
         <attr name="fillColor" format="color"></attr>
-        <attr name="rowSpace" format="float"></attr>
+        <attr name="rowSpace" format="dimension"></attr>
     </declare-styleable>
 </resources>

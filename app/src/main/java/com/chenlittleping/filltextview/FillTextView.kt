@@ -92,7 +92,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     private var mMaxSizeOneLine = 0
 
     //字体大小
-    private var mTextSize = 16f
+    private var mTextSize = sp2px(16f).toFloat()
 
     //当前绘制到第几行
     private var mCurDrawRow = 1
@@ -110,7 +110,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     private var mOneRowTexts = arrayListOf<AText>()
 
     //默认行距2dp，也是最小行距（用户设置的行距在此基础上叠加，即：2 + cst）
-    private var mRowSpace = 2f
+    private var mRowSpace = dp2px(2f).toFloat()
 
     //是否显示下划线
     private var mUnderlineVisible = false
@@ -138,11 +138,11 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
 
     private fun getAttrs(attrs: AttributeSet) {
         val ta = context.obtainStyledAttributes(attrs, R.styleable.filled_text)
-        mTextSize = ta.getFloat(R.styleable.filled_text_textSize, mTextSize)
-        mText = mText.append(ta.getText(R.styleable.filled_text_filledText))
+        mTextSize = ta.getDimension(R.styleable.filled_text_fillTextSize, mTextSize)
+        mText = mText.append(ta.getText(R.styleable.filled_text_filledText)?: "")
         mNormalColor = ta.getColor(R.styleable.filled_text_normalColor, Color.BLACK)
         mFillColor = ta.getColor(R.styleable.filled_text_fillColor, Color.BLACK)
-        mRowSpace += ta.getFloat(R.styleable.filled_text_rowSpace, 0f)
+        mRowSpace += ta.getDimension(R.styleable.filled_text_rowSpace, 0f)
         ta.recycle()
     }
 
@@ -169,8 +169,8 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      * 初始化文字画笔
      */
     private fun initTextPaint() {
-        mTextSize = sp2px(mTextSize).toFloat()
-        mRowSpace = dp2px(mRowSpace).toFloat()
+//        mTextSize = sp2px(mTextSize).toFloat()
+//        mRowSpace = dp2px(mRowSpace).toFloat()
 
         mNormalPaint.color = mNormalColor
         mNormalPaint.textSize = mTextSize
@@ -213,12 +213,6 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         mTextList.add(AText(mEditEndTag + texts[texts.size - 1]))
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        mWidth = w
-        mMaxSizeOneLine = (w / mOneWordWidth).toInt()
-    }
-
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         val widthMode = MeasureSpec.getMode(widthMeasureSpec)
@@ -229,17 +223,34 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         var width = widthSize
         var height = heightSize
 
+        val realText = StringBuffer()
+        for (aText in mTextList) {
+            realText.append(aText.text)
+        }
         when(widthMode) {
-            MeasureSpec.EXACTLY -> width = widthSize
-            MeasureSpec.UNSPECIFIED, MeasureSpec.AT_MOST ->
-                width = Math.min(widthSize, measureTextLength(mText.toString()).toInt())
+            MeasureSpec.EXACTLY -> {
+                width = widthSize
+                //用户指定宽高
+                mWidth = width
+                mMaxSizeOneLine = (width / mOneWordWidth).toInt()
+            }
+            MeasureSpec.UNSPECIFIED, MeasureSpec.AT_MOST -> {
+                //绘制宽高为文字最大长度，如果长度超过，则使用父布局可用的最大长度
+                width = if (mText.isEmpty()) 0
+                else Math.min(widthSize, measureTextLength(realText.toString()).toInt())
+
+                //设配最大宽高
+                mWidth = widthSize
+                mMaxSizeOneLine = (widthSize / mOneWordWidth).toInt()
+            }
         }
 
         when(heightMode) {
             MeasureSpec.EXACTLY -> height = heightSize
             MeasureSpec.UNSPECIFIED, MeasureSpec.AT_MOST ->
-                height = Math.min(heightSize, //其中mRowSpace + mNormalPaint.fontMetrics.descent最后一行距离底部的间距
-                        (getRowHeight() * (mCurDrawRow - 1) + mRowSpace + mNormalPaint.fontMetrics.descent).toInt())
+                height = if (realText.isEmpty()) 0
+                else //其中mRowSpace + mNormalPaint.fontMetrics.descent是最后一行距离底部的间距
+                    (getRowHeight() * (mCurDrawRow - 1) + mRowSpace + mNormalPaint.fontMetrics.descent).toInt()
         }
         setMeasuredDimension(width, height)
     }
@@ -306,7 +317,9 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
                 }
             }
         }
-        drawCursor(canvas)
+        if (isFocused) {
+            drawCursor(canvas)
+        }
         super.draw(canvas)
         canvas.restore()
     }
@@ -324,6 +337,16 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
             true
         })
         mHandler!!.sendEmptyMessageDelayed(1, 500)
+    }
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (gainFocus) {
+            mHandler?.removeMessages(1)
+            mHandler?.sendEmptyMessageDelayed(1, 500)
+        } else {//失去焦点时，停止刷新光标
+            mHandler?.removeMessages(1)
+        }
     }
 
     /**
@@ -640,7 +663,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      * 设置字体大小，单位sp
      */
     fun setTextSize(sp: Float) {
-        mTextSize = sp
+        mTextSize = sp2px(sp).toFloat()
         initTextPaint()
         initFillPaint()
         invalidate()
@@ -650,7 +673,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      * 设置行距，单位dp
      */
     fun setRowSpace(dp: Float) {
-        mRowSpace = dp2px(dp).toFloat()
+        mRowSpace = dp2px(2+dp).toFloat()
         invalidate()
     }
 
