@@ -371,7 +371,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         var x = 0f
         for (aText in mOneRowTexts) {
             canvas.drawText(aText.text, x, getRowHeight()*mCurDrawRow,
-                            if (aText.isFill) mFillPaint else mNormalPaint)
+                if (aText.isFill) mFillPaint else mNormalPaint)
 
             val lineStartX = x
             x += measureTextLength(aText.text)
