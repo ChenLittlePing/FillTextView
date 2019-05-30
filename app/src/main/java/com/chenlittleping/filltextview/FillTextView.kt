@@ -27,15 +27,16 @@ import java.util.regex.Pattern
  *
  */
 class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
-
     //编辑字段标记
-    private var EDIT_TAG = "<fill>"
+    private var EDIT_TAG_BEGIN = "<fill>"
+    private var EDIT_TAG_END = "<fill/>"
 
-    //编辑字段替换
-    private var EDIT_REPLACEMENT = "【        】"
+    //可点击字段标记
+    private var CLICK_TAG_BEGIN = "<click>"
+    private var CLICK_TAG_END = "<click/>"
 
     //可编辑空白
-    private val BLANKS = "        "
+    private var BLANKS = "        "
 
     //可编辑开始符
     private var mEditStartTag = "【"
@@ -73,11 +74,17 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     //普通文字颜色
     private var mNormalColor = Color.BLACK
 
-    //文字画笔
+    //填空文字画笔
     private val mFillPaint = Paint()
 
     //填写文字颜色
     private var mFillColor = Color.BLACK
+
+    //提示文字画笔
+    private val mFillHolderPaint = Paint()
+
+    //提示文字颜色
+    private var mFillHolderColor = Color.GRAY
 
     //光标画笔
     private val mCursorPain = Paint()
@@ -122,6 +129,8 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         isAntiAlias = true
     }
 
+    private var mTextClickListener: OnClickListener? = null
+
     constructor(context: Context): super(context) {
         init()
     }
@@ -150,6 +159,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         initCursorPaint()
         initTextPaint()
         initFillPaint()
+        initFillHolderPaint()
         splitTexts()
         initHandler()
         setOnKeyListener(this)
@@ -185,6 +195,12 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         mFillPaint.isAntiAlias = true
     }
 
+    private fun initFillHolderPaint() {
+        mFillHolderPaint.color = mFillHolderColor
+        mFillHolderPaint.textSize = mTextSize
+        mFillHolderPaint.isAntiAlias = true
+    }
+
     private fun dp2px(dp: Float): Int {
         val density = resources.displayMetrics.density
         return (dp * density + 0.5).toInt()
@@ -200,17 +216,49 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
      */
     private fun splitTexts() {
         mTextList.clear()
-        val texts = mText.split(EDIT_TAG)
+        val texts = mText.split(EDIT_TAG_END, CLICK_TAG_END)
         for (i in 0 until texts.size - 1) {
             var text = texts[i]
-            if (i > 0) {
-                text = mEditEndTag + text
+            if (text.contains(EDIT_TAG_BEGIN)) {
+                val typeText = text.split(EDIT_TAG_BEGIN)
+                text = if (i > 0) {
+                    mEditEndTag + typeText[0]
+                } else {
+                    typeText[0]
+                }
+                if (typeText[0].isNotEmpty()) {
+                    text += mEditStartTag
+                    mTextList.add(AText(text))
+                }
+                if (typeText[1].isNotEmpty()) {
+                    mTextList.add(AText("", typeText[1], true, EditType.INPUT))
+                } else {
+                    mTextList.add(AText("", BLANKS, true, EditType.INPUT))
+                }
+            } else if (text.contains(CLICK_TAG_BEGIN)) {
+                val typeText = text.split(CLICK_TAG_BEGIN)
+                if (i > 0) {
+                    text = mEditEndTag + typeText[0]
+                }
+                if (typeText.size > 1) {
+                    if (typeText[0].isNotEmpty()) {
+                        text += mEditStartTag
+                        mTextList.add(AText(text))
+                    }
+                    if (typeText[1].isNotEmpty()) {
+                        mTextList.add(AText("", typeText[1], true, EditType.CLICK))
+                    } else {
+                        mTextList.add(AText("", BLANKS, true, EditType.INPUT))
+                    }
+                }
+            } else if (text.isNotEmpty()) {
+                mTextList.add(AText(text))
             }
-            text += mEditStartTag
-            mTextList.add(AText(text))
-            mTextList.add(AText(BLANKS, true))
         }
-        mTextList.add(AText(mEditEndTag + texts[texts.size - 1]))
+        val lastText = mEditEndTag + texts[texts.size - 1]
+        if (lastText.isNotEmpty()) {
+            mTextList.add(AText(lastText))
+        }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -251,15 +299,16 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         mEndIndex = mMaxSizeOneLine
         for (i in 0 until mTextList.size) {
             val aText = mTextList[i]
-            val text = aText.text
+            val text = if(aText.text.isNotEmpty()) aText.text else aText.placeholder
             while (true) {
                 if (mEndIndex > text.length) {
                     mEndIndex = text.length
                 }
                 addEditStartPos(aText) //记录编辑初始位置
 
-                val cs = text.subSequence(mStartIndex, mEndIndex)
-                mOneRowTexts.add(AText(cs.toString(), aText.isFill))
+                var cs = text.subSequence(mStartIndex, mEndIndex)
+                val t = if(aText.text.isEmpty()) "" else cs
+                mOneRowTexts.add(AText(t.toString(), cs.toString(), aText.isFill, aText.type))
                 mOneRowText.append(cs)
 
                 val textWidth = measureTextLength(mOneRowText.toString())
@@ -286,7 +335,9 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
                             mStartIndex = 0
                             mEndIndex = textCount.toInt()
                             if (mStartIndex == mEndIndex) {
-                                val one = measureTextLength(mTextList[i + 1].text.substring(0, 1))
+                                val atext = mTextList[i + 1]
+                                val validText = if (atext.text.isNotEmpty()) atext.text else atext.placeholder
+                                val one = measureTextLength(validText.substring(0, 1))
                                 if (one + textWidth < mWidth) { //可以放多一个字
                                     mEndIndex = 1 //只读下一段文字第一个字
                                 } else {
@@ -347,11 +398,20 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         val fm = mNormalPaint.fontMetrics //文字基准线问题
         var x = 0f
         for (aText in mOneRowTexts) {
-            canvas.drawText(aText.text, x, getRowHeight()*mCurDrawRow,
-                            if (aText.isFill) mFillPaint else mNormalPaint)
+            val paint = if (aText.type == EditType.NONE) {
+                mNormalPaint
+            } else {
+                if (aText.text.isNotEmpty()) {
+                    mFillPaint
+                } else {
+                    mFillHolderPaint
+                }
+            }
+            val text = if (aText.text.isNotEmpty()) aText.text else aText.placeholder
+            canvas.drawText(text, x, getRowHeight()*mCurDrawRow, paint)
 
             val lineStartX = x
-            x += measureTextLength(aText.text)
+            x += measureTextLength(text)
 
             if (aText.isFill && mUnderlineVisible) {
                 canvas.drawLine(lineStartX, getRowHeight()*mCurDrawRow + fm.descent,
@@ -462,14 +522,19 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 if (touchCollision(event)) {
-                    isFocusableInTouchMode = true //important
-                    isFocusable = true
-                    requestFocus()
-                    try {
-                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                        imm.showSoftInput(this, InputMethodManager.RESULT_SHOWN)
-                        imm.restartInput(this)
-                    } catch (ignore: Exception) {
+                    if (mEditingText?.type == EditType.INPUT) {
+                        isFocusableInTouchMode = true //important
+                        isFocusable = true
+                        requestFocus()
+                        try {
+                            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                            imm.showSoftInput(this, InputMethodManager.RESULT_SHOWN)
+                            imm.restartInput(this)
+                        } catch (ignore: Exception) {
+                        }
+                    } else if (mEditingText?.type == EditType.CLICK) {
+                        hideInput()
+                        mTextClickListener?.onClick(this)
                     }
                     return true
                 }
@@ -489,14 +554,16 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
                     if (event.x > posInfo.rect.left && event.x < posInfo.rect.right &&
                         event.y > posInfo.rect.top && event.y < posInfo.rect.bottom) {
                         mEditTextRow = row
-                        if (aText.text == BLANKS) {
+                        if (aText.text == "") {
                             val firstRow = aText.getStartPos()
                             if (firstRow >= 0) { //可能存在换行
                                 mEditTextRow = firstRow
                             }
                         }
                         mEditingText = aText
-                        calculateCursorPos(event, aText.posInfo[mEditTextRow]!!, aText.text)
+                        if (aText.type == EditType.INPUT) {
+                            calculateCursorPos(event, aText.posInfo[mEditTextRow]!!, aText.text)
+                        }
                         return true
                     }
                 }
@@ -514,7 +581,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         var nWord = (innerWidth / mOneWordWidth).toInt()
         var wordsWidth = 0
         if (nWord <= 0) nWord = 1
-        if (text == BLANKS) {
+        if (text == "") {
             mCursor[0] = posInfo.rect.left.toFloat()
             mCursor[1] = posInfo.rect.bottom.toFloat()
             mCursorIndex = 0
@@ -591,7 +658,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     }
 
     override fun onDeleteWord() {
-        if (mEditingText != null) {
+        if (mEditingText != null && mEditingText!!.type == EditType.INPUT) {
             val text = StringBuffer(mEditingText?.text)
             if (!text.isNullOrEmpty() &&
                 text.toString() != BLANKS &&
@@ -610,8 +677,8 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
                 mCursorIndex--
 
                 if (mEditingText?.text?.length?:0 <= 0) {
-                    if (text.toString() != BLANKS) {
-                        mEditingText?.text = BLANKS
+                    if (text.toString() != "") {
+                        mEditingText?.text = ""
                         mCursorIndex = 1
                         val firstRow = mEditingText!!.getStartPos()
                         if (firstRow > 0) {//可能存在换行
@@ -660,6 +727,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     fun setEditTag(startTag: String, endTag: String) {
         mEditStartTag = startTag
         mEditEndTag = endTag
+        splitTexts()
         invalidate()
     }
 
@@ -678,6 +746,12 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
         invalidate()
     }
 
+    fun setBlank(blank: String) {
+        BLANKS = blank
+        splitTexts()
+        postInvalidate()
+    }
+
     /**
      * 获取填写的文本内容
      */
@@ -689,6 +763,15 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
             }
         }
         return list
+    }
+
+    fun updateEditingText(text: String) {
+        mEditingText?.text = text
+        postInvalidate()
+    }
+
+    fun setOnTextClickListener(l: OnClickListener) {
+        mTextClickListener = l
     }
 }
 
@@ -729,12 +812,20 @@ internal class MyInputConnection(targetView: View, fullEditor: Boolean, private 
  * @Datetime 2019-04-29 09:27
  *
  */
-internal class AText(text: String, isFill: Boolean = false) {
+internal class AText(text: String = "",
+                     placeholder: String = "",
+                     isFill: Boolean = false,
+                     type: EditType = EditType.NONE) {
     //段落文字
     var text: String = text
 
+    var placeholder: String = placeholder
+
     //是否为填写字段
     var isFill = isFill
+    get() {return type != EditType.NONE}
+
+    var type = type
 
     //文本位置信息<行，文本框>
     var posInfo: MutableMap<Int, EditPosInfo> = mutableMapOf()
@@ -753,3 +844,12 @@ internal class AText(text: String, isFill: Boolean = false) {
 
 data class EditPosInfo(var index: Int,
                        var rect: Rect)
+
+enum class EditType {
+    //普通文字
+    NONE,
+    //输入
+    INPUT,
+    //点击
+    CLICK
+}
