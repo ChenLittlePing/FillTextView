@@ -10,7 +10,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        fillText.setText("大家好，我是<fill>请输入姓名<fill/>，<fill><fill/>, 这里可以点击<click>点我<click/>，<click>点我<click/>")
+        fillText.setText("大家好，我是<fill>请输入姓名</fill>，<fill></fill>, 这里可以点击<click>点我</click>，<underline>我有下划线</underline>")
         fillText.setEditTag("", "")
         fillText.setBlank("                  ")
         fillText.displayUnderline(true)
