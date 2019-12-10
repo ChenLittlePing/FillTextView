@@ -161,6 +161,7 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     }
 
     private fun init() {
+        isFocusable = true
         initCursorPaint()
         initTextPaint()
         initFillPaint()
@@ -577,6 +578,8 @@ class FillTextView: View, MyInputConnection.InputListener, View.OnKeyListener {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        isFocusableInTouchMode = true
+        requestFocus()
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 if (touchCollision(event)) {
